@@ -1,0 +1,214 @@
+// This is your Prisma schema file for SIM-BANSOS DESA
+// Compatible with PostgreSQL / MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN_DESA
+  KEPALA_DESA
+  PETUGAS_LAPANGAN
+}
+
+enum JenisKelamin {
+  L
+  P
+}
+
+enum StatusRumah {
+  MILIK_SENDIRI
+  MENUMPANG
+  SEWA
+  BUKAN_MILIK_SENDIRI
+}
+
+enum KategoriKelayakan {
+  SANGAT_LAYAK
+  LAYAK
+  TIDAK_LAYAK
+}
+
+enum StatusUsulan {
+  MENUNGGU_VERIFIKASI_ADMIN
+  MENUNGGU_PERSETUJUAN_KADES
+  DISETUJUI
+  DITOLAK
+}
+
+enum StatusPenyaluran {
+  TERJADWAL
+  BERLANGSUNG
+  SELESAI
+}
+
+enum StatusPenerima {
+  BELUM_DISALURKAN
+  SUDAH_DISALURKAN
+  GAGAL_DISALURKAN
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  nama         String
+  role         Role      @default(PETUGAS_LAPANGAN)
+  jabatan      String
+  wilayahTugas String?
+  email        String    @unique
+  telepon      String
+  avatar       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  usulanDibuat UsulanBansos[] @relation("Pengusul")
+  auditLogs    AuditLog[]
+}
+
+model Warga {
+  id                 String       @id @default(cuid())
+  nik                String       @unique @db.VarChar(16)
+  noKk               String       @db.VarChar(16)
+  nama               String
+  tempatLahir        String
+  tanggalLahir       DateTime
+  jenisKelamin       JenisKelamin
+  alamat             String
+  dusun              String
+  rt                 String       @db.VarChar(3)
+  rw                 String       @db.VarChar(3)
+  pekerjaan          String
+  penghasilan        Decimal      @db.Decimal(12, 2)
+  jumlahTanggungan   Int
+  statusRumah        StatusRumah
+  kondisiLantai      String
+  kondisiDinding     String
+  kondisiAtap        String
+  dayaListrik        String
+  lansiaDisabilitas  Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  usulanList         UsulanBansos[]
+  penyaluranPenerima PenerimaPenyaluran[]
+
+  @@index([nik])
+  @@index([dusun, rt, rw])
+}
+
+model ProgramBansos {
+  id                String    @id @default(cuid())
+  kode              String    @unique
+  nama              String
+  sumberDana        String
+  periode           String
+  tahun             Int
+  jenis             String
+  nominalPerKpm     Decimal   @db.Decimal(12, 2)
+  keteranganBarang  String?
+  kuota             Int
+  kriteriaEksklusif Boolean   @default(false)
+  status            String    @default("AKTIF")
+  keterangan        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  jadwalPenyaluran  PenyaluranJadwal[]
+  penerimaList      PenerimaPenyaluran[]
+}
+
+model UsulanBansos {
+  id                   String            @id @default(cuid())
+  wargaId              String
+  warga                Warga             @relation(fields: [wargaId], references: [id], onDelete: Cascade)
+  pengusulId           String
+  pengusul             User              @relation("Pengusul", fields: [pengusulId], references: [id])
+  fotoKtp              String?
+  fotoKk               String?
+  fotoRumahDepan       String?
+  fotoRumahDalam       String?
+  catatanPetugas       String
+  skorKelayakan        Int
+  kategoriKelayakan    KategoriKelayakan
+  skorPenghasilan      Int
+  skorPerumahan        Int
+  skorTanggungan       Int
+  skorKerentanan       Int
+  status               StatusUsulan      @default(MENUNGGU_VERIFIKASI_ADMIN)
+  rekomendasiProgramId String?
+  catatanAdmin         String?
+  diverifikasiOleh     String?
+  tanggalVerifikasi    DateTime?
+  catatanKades         String?
+  disetujuiOleh        String?
+  tanggalPersetujuan   DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([status])
+  @@index([wargaId])
+}
+
+model PenyaluranJadwal {
+  id                     String           @id @default(cuid())
+  programId              String
+  program                ProgramBansos    @relation(fields: [programId], references: [id])
+  judul                  String
+  tanggal                DateTime
+  waktu                  String
+  lokasi                 String
+  petugasPenanggungJawab String
+  kontakPetugas          String
+  totalSasaran           Int              @default(0)
+  totalTersalurkan       Int              @default(0)
+  status                 StatusPenyaluran @default(TERJADWAL)
+  catatan                String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  penerimaList           PenerimaPenyaluran[]
+}
+
+model PenerimaPenyaluran {
+  id                 String           @id @default(cuid())
+  jadwalId           String
+  jadwal             PenyaluranJadwal @relation(fields: [jadwalId], references: [id], onDelete: Cascade)
+  programId          String
+  program            ProgramBansos    @relation(fields: [programId], references: [id])
+  wargaId            String
+  warga              Warga            @relation(fields: [wargaId], references: [id])
+  status             StatusPenerima   @default(BELUM_DISALURKAN)
+  alasanGagal        String?
+  waktuSerahTerima   DateTime?
+  petugasPenyalur    String?
+  namaPenerimaNyata  String?
+  hubunganDenganKpm  String?
+  fotoBukti          String?
+  tandaTangan        String?          @db.Text
+  catatan            String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([jadwalId, wargaId])
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  details   String
+  timestamp DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([timestamp])
+}
